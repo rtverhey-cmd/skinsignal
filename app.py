@@ -1,16 +1,15 @@
 """
-SKINSIGNAL — Server v3
+SKINSIGNAL — Server v3.1
 No Reddit API credentials needed.
 Uses Reddit public JSON endpoints.
+195 brands + ingredients for signal detection.
 
-Environment variables needed (Railway dashboard):
+Environment variables (Railway):
   SENDGRID_API_KEY
   ALERT_EMAIL
   FROM_EMAIL
   SECRET_KEY
-  KEEPA_API_KEY
-
-That's it. No Reddit credentials at all.
+  KEEPA_API_KEY  (optional)
 """
 
 import os
@@ -48,21 +47,101 @@ SUBREDDITS = [
     "MakeupAddiction",
 ]
 
+# ─────────────────────────────────────────────────────────────
+# BRANDS — 195 entries
+# ─────────────────────────────────────────────────────────────
+
 BRANDS = [
+    # Korean skincare — established
     "cosrx", "some by mi", "beauty of joseon", "anua", "torriden",
     "round lab", "skin1004", "isntree", "pyunkang yul", "klairs",
     "laneige", "innisfree", "etude", "missha", "mediheal",
     "goodal", "axis-y", "ma:nyo", "manyo", "tirtir", "numbuzin",
-    "abib", "heimish", "farmacy", "cerave", "la roche-posay",
-    "neutrogena", "aveeno", "paula's choice", "the ordinary",
-    "drunk elephant", "tatcha", "sk-ii", "skinceuticals",
-    "olay", "belif", "first aid beauty", "kiehl's",
+    "abib", "heimish", "farmacy",
+
+    # Korean skincare — rising
+    "mixsoon", "benton", "dear klairs", "i'm from", "im from",
+    "haruharu", "haruharu wonder", "banila co", "a'pieu", "apieu",
+    "iunik", "illiyoon", "medicube", "dr jart", "dr. jart",
+    "the face shop", "nature republic", "holika holika", "skinfood",
+    "mizon", "neogen", "neogen dermalogy", "make p:rem", "rovectin",
+    "purito", "by wishtrend", "biodance", "aestura", "clio",
+    "peripera", "rom&nd", "espoir", "3ce", "lagom", "huxley",
+    "whamisa", "blithe", "son & park", "son and park",
+    "thank you farmer", "acwell", "jayjun", "tosowoong",
+    "elizavecca", "graymelin", "amorepacific", "sulwhasoo",
+    "hera", "iope", "sum37", "su:m37", "primera", "mamonde",
+    "beyond", "sooryehan", "skin&lab", "skin and lab",
+
+    # Japanese skincare
+    "hada labo", "hadalabo", "rohto", "mentholatum", "curel",
+    "fancl", "albion", "sk-ii", "sk ii", "shiseido", "kose",
+    "kanebo", "sofina", "pola", "decorte", "ipsa", "elixir",
+    "anessa", "senka", "biore", "minon", "kikumasamune",
+    "tatcha", "boscia",
+
+    # Western prestige
+    "la mer", "lamer", "creme de la mer", "estee lauder",
+    "clinique", "lancome", "sisley", "valmont", "la prairie",
+    "charlotte tilbury", "elemis", "sunday riley", "drunk elephant",
+    "glow recipe", "fresh", "kiehl's", "kiehls", "origins",
+    "philosophy", "peter thomas roth", "ole henriksen",
+    "mario badescu", "glamglow", "caudalie", "murad",
+    "dermalogica", "perricone md", "ren clean skincare",
+    "ren skincare", "emma hardie", "liz earle", "eve lom",
+    "medik8", "paula's choice", "paulas choice",
+    "the inkey list", "inkey list", "the ordinary", "niod", "deciem",
+
+    # Western mass market
+    "cerave", "cetaphil", "la roche-posay", "la roche posay",
+    "neutrogena", "aveeno", "olay", "pond's", "ponds",
+    "nivea", "eucerin", "vichy", "bioderma", "avene",
+    "uriage", "nuxe", "garnier", "l'oreal", "loreal",
+
+    # Clean / indie / DTC
+    "beautycounter", "tata harper", "juice beauty",
+    "true botanicals", "indie lee", "youth to the people",
+    "versed", "hero cosmetics", "byoma", "good molecules",
+    "naturium", "facetheory", "skinfix", "first aid beauty",
+    "krave beauty", "krave", "cocokind", "acure", "glossier",
+
+    # Dermatologist / clinical
+    "skinceuticals", "isdin", "alastin", "sente", "epionce",
+    "revision skincare", "zo skin health", "skinmedica", "obagi",
+    "jan marini", "glytone", "neostrata", "exuviance",
+    "image skincare", "pca skin", "glo skin beauty",
+
+    # Sunscreen specialists
+    "skin aqua", "biore uv", "biore sunscreen",
+    "canmake sunscreen", "altruist", "ultrasun",
+    "bondi sands spf", "invisible zinc", "bare republic",
+    "supergoop", "coola", "elta md", "eltamd", "tizo",
+    "blue lizard", "sun bum",
+
+    # Tools and devices
+    "foreo", "nuface", "nu face", "theraface",
+    "current body", "currentbody", "solawave", "ziip",
+
+    # Ingredients — catch ingredient-focused posts
+    "niacinamide", "retinol", "tretinoin", "bakuchiol",
+    "hyaluronic acid", "vitamin c serum", "glycolic acid",
+    "salicylic acid", "snail mucin", "centella",
+    "ceramide", "peptide serum", "azelaic acid",
+    "tranexamic acid", "kojic acid", "alpha arbutin",
+    "squalane", "rosehip oil", "marula oil",
 ]
 
+# ─────────────────────────────────────────────────────────────
+# INTENT PHRASES
+# ─────────────────────────────────────────────────────────────
+
 INTENT_PHRASES = [
-    "where to buy", "where can i buy", "link?", "asin?",
-    "amazon link", "just ordered", "just bought", "in my cart",
-    "is this on amazon", "sephora link", "where did you get",
+    "where to buy", "where can i buy", "where do i buy",
+    "where can i find", "link?", "asin?", "amazon link",
+    "just ordered", "just bought", "just purchased",
+    "in my cart", "added to cart", "is this on amazon",
+    "sephora link", "ulta link", "where did you get",
+    "what's the amazon link", "how do i get this",
 ]
 
 # ─────────────────────────────────────────────────────────────
@@ -138,7 +217,7 @@ def extract_product(text):
         if brand in text_lower:
             idx   = text_lower.find(brand)
             raw   = text[idx: idx + len(brand) + 45]
-            clean = re.sub(r"[^\w\s\+\-]", " ", raw)
+            clean = re.sub(r"[^\w\s\+\-\&\']", " ", raw)
             clean = " ".join(clean.split()).strip()
             if len(clean) >= len(brand):
                 return clean[:60]
@@ -172,7 +251,11 @@ def check_trends(product_name):
         late  = sum(values[mid:])  / max(len(values) - mid, 1)
         delta = round(((late - early) / early) * 100, 1) if early > 0 \
                 else (100.0 if late > 0 else 0.0)
-        return {"delta": delta, "rising": delta >= 40, "values": [int(v) for v in values[-12:]]}
+        return {
+            "delta":  delta,
+            "rising": delta >= 40,
+            "values": [int(v) for v in values[-12:]],
+        }
     except Exception as e:
         return {"delta": 0, "rising": False, "values": [], "error": str(e)}
 
@@ -183,8 +266,13 @@ def score_signal(upvotes, intent_count, trends):
         "intent": min(25, intent_count * 8),
     }
     delta = trends.get("delta", 0)
-    pts["trends"] = (35 if delta >= 200 else 25 if delta >= 100
-                     else 16 if delta >= 50 else 8 if delta >= 40 else 0)
+    pts["trends"] = (
+        35 if delta >= 200 else
+        25 if delta >= 100 else
+        16 if delta >= 50  else
+        8  if delta >= 40  else
+        0
+    )
     score  = min(100, int(sum(pts.values()) * (100 / 85)))
     action = "APPROVE" if score >= 75 else "WATCH" if score >= 50 else "DISCARD"
     return score, pts, action
@@ -209,6 +297,7 @@ def send_alert(signal, bsr_alert=False, pct_change=0):
             baseline = signal.get("bsr_baseline", 0)
             current  = signal.get("bsr_current", 0)
             subject  = f"✅ BSR Confirmed — {product[:40]}"
+            headline = "BSR Movement Confirmed — Build the page NOW"
             body_rows = f"""
             <tr><td style="padding:8px 0;color:#888;width:40%">Product</td>
                 <td style="padding:8px 0;font-weight:bold">{product}</td></tr>
@@ -219,7 +308,6 @@ def send_alert(signal, bsr_alert=False, pct_change=0):
             <tr><td style="padding:8px 0;color:#888">Improvement</td>
                 <td style="padding:8px 0;font-weight:bold;color:#00C896">+{pct_change:.0f}%</td></tr>
             """
-            headline    = "BSR Movement Confirmed — Build the page NOW"
             action_text = "The signal validated. Build your affiliate page now while CPC is still low."
         else:
             fire     = "🔥🔥🔥" if score >= 90 else "🔥🔥" if score >= 80 else "🔥"
@@ -259,8 +347,12 @@ def send_alert(signal, bsr_alert=False, pct_change=0):
           </div>
         </div>"""
 
-        msg = Mail(from_email=FROM_EMAIL, to_emails=ALERT_EMAIL,
-                   subject=subject, html_content=html)
+        msg = Mail(
+            from_email=FROM_EMAIL,
+            to_emails=ALERT_EMAIL,
+            subject=subject,
+            html_content=html,
+        )
         sg  = sendgrid.SendGridAPIClient(api_key=SENDGRID_API_KEY)
         r   = sg.send(msg)
         log.info(f"Email sent — {r.status_code}")
@@ -276,6 +368,7 @@ def send_alert(signal, bsr_alert=False, pct_change=0):
 
 def run_scraper():
     log.info(f"── Scraper run {datetime.now().strftime('%Y-%m-%d %H:%M')} ──")
+    log.info(f"   Monitoring {len(BRANDS)} brands across {len(SUBREDDITS)} subreddits")
 
     existing  = load_signals()
     seen_ids  = {s["id"] for s in existing}
@@ -304,6 +397,7 @@ def run_scraper():
                     continue
 
                 log.info(f"  [{post['score']:,}] {post.get('title','')[:60]}")
+                log.info(f"  → Product: {product}")
 
                 comments = get_post_comments(name, post_id)
                 intent   = count_intent(comments)
@@ -312,7 +406,7 @@ def run_scraper():
                     post["score"], intent, trends
                 )
 
-                log.info(f"  → {product[:40]} | {score}/100 | {action}")
+                log.info(f"  → Score: {score}/100  Action: {action}")
 
                 signal = {
                     "id":               post_id,
@@ -360,6 +454,8 @@ def run_scraper():
     if new_found:
         save_signals(new_found + existing)
         log.info(f"Saved {len(new_found)} new signals")
+    else:
+        log.info("No new signals this run")
 
     log.info("── Scraper done ──")
 
@@ -368,7 +464,7 @@ def run_scraper():
 # ─────────────────────────────────────────────────────────────
 
 def run_bsr_monitor():
-    if not KEEPA_API_KEY or KEEPA_API_KEY == "PASTE_HERE":
+    if not KEEPA_API_KEY:
         log.info("BSR monitor skipped — no Keepa key")
         return
     try:
@@ -419,9 +515,12 @@ def update_signal(signal_id):
                     s[field] = value
             if "asin" in data and data["asin"] and not s.get("bsr_baseline"):
                 if KEEPA_API_KEY:
-                    from bsr_monitor import record_baseline
-                    s = record_baseline(s)
-                    signals[i] = s
+                    try:
+                        from bsr_monitor import record_baseline
+                        s = record_baseline(s)
+                        signals[i] = s
+                    except Exception as e:
+                        log.error(f"BSR baseline error: {e}")
             s["lastUpdated"] = datetime.now().isoformat()
             save_signals(signals)
             return jsonify({"ok": True})
@@ -512,14 +611,20 @@ def health():
         "status":     "running",
         "time":       datetime.now().isoformat(),
         "signals":    len(signals),
+        "brands":     len(BRANDS),
         "keepa":      bool(KEEPA_API_KEY),
-        "version":    "3.0 (no Reddit credentials needed)",
+        "version":    "3.1 (195 brands)",
     })
 
 
 @app.route("/", methods=["GET"])
 def index():
-    return jsonify({"name": "skinsignal", "status": "running", "version": "3.0"})
+    return jsonify({
+        "name":    "skinsignal",
+        "status":  "running",
+        "version": "3.1",
+        "brands":  len(BRANDS),
+    })
 
 # ─────────────────────────────────────────────────────────────
 # SCHEDULER
@@ -547,12 +652,13 @@ def start_scheduler():
 # ─────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    log.info("=" * 50)
-    log.info("  SKINSIGNAL SERVER v3")
+    port = int(os.environ.get("PORT", 8080))
+    log.info("=" * 55)
+    log.info("  SKINSIGNAL SERVER v3.1")
     log.info(f"  Port: {port}")
+    log.info(f"  Brands: {len(BRANDS)}")
+    log.info(f"  Subreddits: {len(SUBREDDITS)}")
     log.info(f"  Alert email: {ALERT_EMAIL}")
-    log.info(f"  No Reddit credentials needed")
-    log.info("=" * 50)
+    log.info("=" * 55)
     start_scheduler()
     app.run(host="0.0.0.0", port=port, debug=False)
