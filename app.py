@@ -517,15 +517,20 @@ def bsr_loop():
 
 
 def start_scheduler():
-    """Start background threads for scraper and BSR monitor."""
+    """Start background threads after Flask is ready."""
+    def delayed_start():
+        time.sleep(10)  # Wait 10 seconds for Flask to fully start
+        scraper_thread = threading.Thread(
+            target=scraper_loop, daemon=True, name="scraper")
+        scraper_thread.start()
+        log.info("✅ Scraper thread started")
+        bsr_thread = threading.Thread(
+            target=bsr_loop, daemon=True, name="bsr_monitor")
+        bsr_thread.start()
+        log.info("✅ BSR monitor thread started")
 
-    scraper_thread = threading.Thread(target=scraper_loop, daemon=True, name="scraper")
-    scraper_thread.start()
-    log.info("✅ Scraper thread started — runs every 6 hours")
-
-    bsr_thread = threading.Thread(target=bsr_loop, daemon=True, name="bsr_monitor")
-    bsr_thread.start()
-    log.info("✅ BSR monitor thread started — runs every 24 hours")
+    t = threading.Thread(target=delayed_start, daemon=True)
+    t.start()
 
 # ─────────────────────────────────────────────────────────────
 # ROUTES
