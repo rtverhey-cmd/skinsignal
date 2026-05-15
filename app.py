@@ -44,7 +44,7 @@ SECRET_KEY          = os.environ.get("SECRET_KEY",       "change-this-key")
 KEEPA_API_KEY       = os.environ.get("KEEPA_API_KEY",    "")
 
 SIGNALS_FILE        = "signals.json"
-SCRAPE_INTERVAL_SEC = 6 * 60 * 60
+SCRAPE_INTERVAL_SEC = 1 * 60 * 60
 BSR_INTERVAL_SEC    = 24 * 60 * 60
 USER_AGENT          = "skinsignal/1.0 (public data reader; contact: hello@skinsignal.co)"
 
