@@ -526,7 +526,7 @@ def run_scraper():
 
                 if post_id in seen_ids:
                     continue
-                if score_val < 300:
+                if score_val < 20:
                     continue
                 if num_comments < 20:
                     continue
