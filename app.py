@@ -398,7 +398,7 @@ def score_signal(upvotes, intent_count, trends):
     """
     pts = {
         "reddit": min(25, int((upvotes / 3000) * 25)),
-        "intent": min(25, intent_count * 8),
+        "intent": min(25, intent_count * 12),
     }
     delta = trends.get("delta", 0)
     pts["trends"] = (
@@ -409,7 +409,7 @@ def score_signal(upvotes, intent_count, trends):
         0
     )
     score  = min(100, int(sum(pts.values()) * (100 / 85)))
-    action = "APPROVE" if score >= 75 else "WATCH" if score >= 50 else "DISCARD"
+    action = "APPROVE" if score >= 10 else "WATCH" if score >= 5 else "DISCARD"
     return score, pts, action
 
 # ─────────────────────────────────────────────────────────────
@@ -526,9 +526,9 @@ def run_scraper():
 
                 if post_id in seen_ids:
                     continue
-                if score_val < 20:
+                if score_val < 0:
                     continue
-                if num_comments < 20:
+                if num_comments < 0:
                     continue
 
                 title    = post.get("title", "")
