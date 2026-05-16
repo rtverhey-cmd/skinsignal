@@ -6,3 +6,4 @@ pytrends>=4.9.2
 requests>=2.31.0
 gunicorn>=21.0.0
 keepa>=1.3.0
+psycopg2-binary
