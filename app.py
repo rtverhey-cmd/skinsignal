@@ -804,16 +804,16 @@ def index():
 # ─────────────────────────────────────────────────────────────
 # ENTRY POINT
 # ─────────────────────────────────────────────────────────────
+port = int(os.environ.get("PORT", 8080))
+log.info("=" * 55)
+log.info("  SKINSIGNAL v3.3 — Intelligence Upgrade")
+log.info(f"  Port:       {port}")
+log.info(f"  Brands:     {len(BRANDS)}")
+log.info(f"  Subreddits: {len(SUBREDDITS)}")
+log.info(f"  Intent:     {len(INTENT_PHRASES)} phrases")
+log.info(f"  Alert:      {ALERT_EMAIL}")
+log.info("=" * 55)
+start_scheduler()  # ← now runs under Gunicorn
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8080))
-    log.info("=" * 55)
-    log.info("  SKINSIGNAL v3.3 — Intelligence Upgrade")
-    log.info(f"  Port:       {port}")
-    log.info(f"  Brands:     {len(BRANDS)}")
-    log.info(f"  Subreddits: {len(SUBREDDITS)}")
-    log.info(f"  Intent:     {len(INTENT_PHRASES)} phrases")
-    log.info(f"  Alert:      {ALERT_EMAIL}")
-    log.info("=" * 55)
-    start_scheduler()
     app.run(host="0.0.0.0", port=port, debug=False)
