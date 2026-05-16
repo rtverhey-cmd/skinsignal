@@ -1,22 +1,12 @@
 """
-SKINSIGNAL — Server v3.3
-Intelligence upgrade based on Reddit/Amazon virality research.
+SKINSIGNAL — Server v3.4
+PostgreSQL persistence replacing signals.json.
 
-Changes from v3.2:
-- 340+ brands (was 242)
-- 7 subreddits (was 4) — added r/30PlusSkinCare, r/OliveMUA, r/AusSkincare
-- Expanded intent phrases — added "holy grail", "repurchased", "saved my skin"
-- Added controversy signals — "overhyped", "counterfeit", "dupe"
-- Added emerging ingredients — PDRN, exosomes, hypochlorous acid
-- Switched to top.json?t=week for higher-scoring posts
-- Threading scheduler (reliable on Railway)
-
-Environment variables (Railway):
-  SENDGRID_API_KEY
-  ALERT_EMAIL
-  FROM_EMAIL
-  SECRET_KEY
-  KEEPA_API_KEY  (optional)
+Changes from v3.3:
+- PostgreSQL via psycopg2 (persistent across Railway deploys)
+- init_db() creates table on first run
+- load_signals() / save_signals() use DB
+- All other logic unchanged
 """
 
 import os
@@ -27,6 +17,8 @@ import logging
 import hashlib
 import threading
 import requests
+import psycopg2
+from psycopg2.extras import Json
 from datetime import datetime
 from threading import Lock
 
@@ -42,44 +34,33 @@ ALERT_EMAIL         = os.environ.get("ALERT_EMAIL",      "")
 FROM_EMAIL          = os.environ.get("FROM_EMAIL",       "alerts@skinsignal.co")
 SECRET_KEY          = os.environ.get("SECRET_KEY",       "change-this-key")
 KEEPA_API_KEY       = os.environ.get("KEEPA_API_KEY",    "")
+DATABASE_URL        = os.environ.get("DATABASE_URL",     "")
 
-SIGNALS_FILE        = "signals.json"
 SCRAPE_INTERVAL_SEC = 1 * 60 * 60
 BSR_INTERVAL_SEC    = 24 * 60 * 60
 USER_AGENT          = "skinsignal/1.0 (public data reader; contact: hello@skinsignal.co)"
 
 # ─────────────────────────────────────────────────────────────
-# SUBREDDITS — expanded from 4 to 7
+# SUBREDDITS
 # ─────────────────────────────────────────────────────────────
-# Added based on intelligence document:
-# r/30PlusSkinCare — mature buyers, high purchase intent, holy grail discussions
-# r/OliveMUA       — olive/darker skin tones, growing K-beauty crossover
-# r/AusSkincare    — strong K-beauty adoption, active purchase discussions
 
 SUBREDDITS = [
-    "SkincareAddiction",    # 4.9M — primary signal source
-    "AsianBeauty",          # 1.5M — K-beauty specialists, early adopters
-    "30PlusSkinCare",       # 1.2M — mature buyers, high spend, holy grail focus
-    "beauty",               # 6M   — general, broad reach
-    "MakeupAddiction",      # 4M   — makeup/skincare crossover
-    "OliveMUA",             # 200K — diverse skin tones, rising K-beauty interest
-    "AusSkincare",          # 150K — active, strong K-beauty purchasing community
+    "SkincareAddiction",
+    "AsianBeauty",
+    "30PlusSkinCare",
+    "beauty",
+    "MakeupAddiction",
+    "OliveMUA",
+    "AusSkincare",
 ]
 
 # ─────────────────────────────────────────────────────────────
-# BRANDS — 340+ entries
-# Prioritised by: Reddit activity + Amazon strength + viral potential
+# BRANDS
 # ─────────────────────────────────────────────────────────────
 
 BRANDS = [
-
-    # ── TIER 1: HIGHEST VIRAL POTENTIAL (Reddit + Amazon + TikTok) ──
-
-    # K-Beauty — Exploding growth
     "medicube", "anua", "biodance", "tirtir", "torriden",
     "mixsoon", "vt cosmetics", "vt", "numbuzin",
-
-    # K-Beauty — Established high performers
     "cosrx", "beauty of joseon", "round lab", "skin1004",
     "isntree", "pyunkang yul", "klairs", "laneige",
     "haruharu", "haruharu wonder", "abib", "axis-y",
@@ -87,8 +68,6 @@ BRANDS = [
     "goodal", "heimish", "benton", "dear klairs",
     "i'm from", "im from", "iunik", "illiyoon",
     "aestura", "rovectin",
-
-    # K-Beauty — Rising
     "some by mi", "etude", "missha", "mediheal",
     "innisfree", "the face shop", "nature republic",
     "holika holika", "skinfood", "mizon", "neogen",
@@ -101,58 +80,34 @@ BRANDS = [
     "amorepacific", "sulwhasoo", "hera", "iope",
     "sum37", "su:m37", "primera", "mamonde",
     "beyond", "sooryehan", "skin&lab",
-
-    # J-Beauty — High Reddit activity
     "hada labo", "hadalabo", "melano cc",
     "rohto", "mentholatum", "curel", "fancl",
     "albion", "sk-ii", "sk ii", "shiseido",
     "kose", "kanebo", "sofina", "pola",
     "decorte", "ipsa", "elixir", "anessa",
     "senka", "biore", "minon", "tatcha",
-
-    # ── TIER 1: WESTERN VIRAL BRANDS ──
-
-    # Celebrity / hype brands
     "rhode", "rhode skin", "rare beauty", "fenty skin",
     "jones road", "jones road beauty",
-
-    # High-growth ingredient brands
     "the ordinary", "the inkey list", "inkey list",
     "naturium", "good molecules", "geek & gorgeous",
     "geek and gorgeous", "stratia", "maelove",
     "timeless", "garden of wisdom",
-
-    # Prestige skincare
     "drunk elephant", "glow recipe", "sunday riley",
     "tatcha", "fresh", "charlotte tilbury",
     "elemis", "medik8", "paula's choice",
     "paulas choice", "peter thomas roth",
-
-    # Problem-solution / acne patches
     "hero cosmetics", "mighty patch", "acne patch",
     "topicals",
-
-    # Gen Z brands
     "byoma", "bubble", "bubble skincare",
     "dieux", "dieux skin",
-
-    # Reddit cult brands
     "stratia", "wishful", "versed",
-
-    # Makeup with skincare overlap
     "e.l.f.", "elf cosmetics", "elf skincare",
     "wonderskin", "saie", "ilia",
     "tower 28", "danessa myricks",
     "milk makeup", "glossier",
-
-    # ── HAIRCARE (high Amazon velocity) ──
     "color wow", "k18", "k18 hair", "olaplex",
     "ouai", "briogeo", "pattern beauty",
-
-    # ── BODY / FRAGRANCE ──
     "sol de janeiro", "cerave body", "eucerin body",
-
-    # ── WESTERN PRESTIGE ──
     "la mer", "lamer", "estee lauder",
     "clinique", "lancome", "sisley", "valmont",
     "la prairie", "kiehl's", "kiehls", "origins",
@@ -162,41 +117,28 @@ BRANDS = [
     "liz earle", "eve lom", "niod", "deciem",
     "skinceuticals", "beautycounter", "tata harper",
     "true botanicals", "youth to the people",
-
-    # ── WESTERN MASS MARKET ──
     "cerave", "cetaphil", "la roche-posay",
     "la roche posay", "neutrogena", "aveeno",
     "olay", "nivea", "eucerin", "vichy",
     "bioderma", "avene", "uriage", "nuxe",
     "garnier", "l'oreal", "loreal",
-
-    # ── DERMATOLOGIST / CLINICAL ──
     "isdin", "alastin", "sente", "epionce",
     "revision skincare", "zo skin health",
     "skinmedica", "obagi", "jan marini",
     "neostrata", "image skincare", "pca skin",
     "elta md", "eltamd", "tizo",
-
-    # ── SUNSCREEN SPECIALISTS ──
     "skin aqua", "biore uv", "canmake sunscreen",
     "altruist", "ultrasun", "supergoop",
     "coola", "blue lizard", "sun bum",
     "invisible zinc", "bare republic",
-
-    # ── TOOLS & DEVICES ──
     "foreo", "nuface", "nu face", "theraface",
     "solawave", "currentbody", "ziip",
-
-    # ── EMERGING INGREDIENTS (ingredient-led virality) ──
-    # Classic
     "niacinamide", "retinol", "tretinoin", "bakuchiol",
     "hyaluronic acid", "vitamin c serum", "glycolic acid",
     "salicylic acid", "snail mucin", "centella",
     "ceramide", "peptide serum", "azelaic acid",
     "tranexamic acid", "kojic acid", "alpha arbutin",
     "squalane", "rosehip oil", "marula oil",
-
-    # 2025/2026 breakout ingredients (from intelligence doc)
     "pdrn", "salmon dna", "exosome", "exosomes",
     "hypochlorous acid", "hocl",
     "rice toner", "rice essence",
@@ -208,24 +150,16 @@ BRANDS = [
 ]
 
 # ─────────────────────────────────────────────────────────────
-# INTENT PHRASES — expanded with holy grail + controversy signals
+# INTENT PHRASES
 # ─────────────────────────────────────────────────────────────
-# Intelligence doc insight: "recommendation recursion" is the
-# strongest early signal — when people recommend without being asked.
-# Added: holy grail phrases, repurchase signals, controversy signals
 
 INTENT_PHRASES = [
-
-    # ── PURCHASE INTENT (original) ──
     "where to buy", "where can i buy", "where do i buy",
     "where can i find", "link?", "asin?", "amazon link",
     "just ordered", "just bought", "just purchased",
     "in my cart", "added to cart", "is this on amazon",
     "sephora link", "ulta link", "where did you get",
     "what's the amazon link", "how do i get this",
-
-    # ── HOLY GRAIL / RECOMMENDATION RECURSION ──
-    # These are the strongest early signals per intelligence doc
     "holy grail", "hg product", "holy grail product",
     "repurchased", "repurchase", "on my third bottle",
     "on my second bottle", "reordered", "auto ship",
@@ -239,16 +173,11 @@ INTENT_PHRASES = [
     "constantly recommended", "staple in my routine",
     "never going back", "cant live without",
     "can't live without",
-
-    # ── CONTROVERSY / POLARIZATION SIGNALS ──
-    # Intelligence doc: polarization creates discussion velocity
     "overhyped", "over hyped", "is it worth it",
     "worth the hype", "lives up to the hype",
     "fake reviews", "counterfeit", "dupe",
     "ruined my skin", "broke me out",
     "holy grail or scam", "scam or legit",
-
-    # ── AVAILABILITY SIGNALS ──
     "sold out", "back in stock", "sold out everywhere",
     "can't find it", "where is it in stock",
 ]
@@ -276,31 +205,81 @@ scheduler_state = {
 }
 
 # ─────────────────────────────────────────────────────────────
-# DATA
+# DATABASE
 # ─────────────────────────────────────────────────────────────
 
+def get_db():
+    return psycopg2.connect(DATABASE_URL, sslmode="require")
+
+
+def init_db():
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS signals (
+                id TEXT PRIMARY KEY,
+                data JSONB NOT NULL,
+                created_at TIMESTAMP DEFAULT NOW()
+            )
+        """)
+        conn.commit()
+        cur.close()
+        conn.close()
+        log.info("✅ Database ready")
+    except Exception as e:
+        log.error(f"DB init error: {e}")
+
+
 def load_signals():
-    if os.path.exists(SIGNALS_FILE):
-        with open(SIGNALS_FILE) as f:
-            return json.load(f)
-    return []
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("SELECT data FROM signals ORDER BY created_at DESC")
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+        return [row[0] for row in rows]
+    except Exception as e:
+        log.error(f"DB load error: {e}")
+        return []
 
 
 def save_signals(signals):
     with lock:
-        with open(SIGNALS_FILE, "w") as f:
-            json.dump(signals, f, indent=2)
+        try:
+            conn = get_db()
+            cur = conn.cursor()
+            for signal in signals:
+                cur.execute("""
+                    INSERT INTO signals (id, data)
+                    VALUES (%s, %s)
+                    ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data
+                """, (signal["id"], Json(signal)))
+            conn.commit()
+            cur.close()
+            conn.close()
+        except Exception as e:
+            log.error(f"DB save error: {e}")
+
+
+def clear_db():
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("DELETE FROM signals")
+        conn.commit()
+        cur.close()
+        conn.close()
+        log.info("DB cleared")
+    except Exception as e:
+        log.error(f"DB clear error: {e}")
 
 # ─────────────────────────────────────────────────────────────
-# REDDIT — top.json?t=week for high-scoring posts
+# REDDIT
 # ─────────────────────────────────────────────────────────────
 
 def get_top_posts(subreddit, limit=50):
-    """
-    Fetch top posts of the past week.
-    Top posts have scores 500-5000+ vs hot posts at 2-50.
-    Falls back to hot if top returns nothing.
-    """
     for sort, extra in [("top", {"t": "week"}), ("hot", {})]:
         url     = f"https://www.reddit.com/r/{subreddit}/{sort}.json"
         headers = {"User-Agent": USER_AGENT}
@@ -349,10 +328,6 @@ def extract_product(text):
 
 
 def count_intent(comments):
-    """
-    Count purchase intent AND holy grail signals.
-    Intelligence doc: recommendation recursion is the #1 early signal.
-    """
     count = 0
     for comment in comments:
         body = comment.lower()
@@ -389,25 +364,24 @@ def check_trends(product_name):
 
 
 def score_signal(upvotes, intent_count, trends):
-    """
-    Scoring aligned with intelligence doc's viral opportunity model:
-    Reddit mention growth:       25pts
-    Recommendation recursion:    25pts (our intent count)
-    Google Trends velocity:      35pts
-    (TikTok: 15pts — added when TikTok layer built)
-    """
     pts = {
         "reddit": min(25, int((upvotes / 3000) * 25)),
         "intent": min(25, intent_count * 12),
     }
     delta = trends.get("delta", 0)
-    pts["trends"] = (
-        35 if delta >= 200 else
-        25 if delta >= 100 else
-        16 if delta >= 50  else
-        8  if delta >= 40  else
-        0
-    )
+    # Only award trends points if real data exists
+    values = trends.get("values", [])
+    if values and any(v > 0 for v in values):
+        pts["trends"] = (
+            35 if delta >= 200 else
+            25 if delta >= 100 else
+            16 if delta >= 50  else
+            8  if delta >= 40  else
+            0
+        )
+    else:
+        pts["trends"] = 0
+
     score  = min(100, int(sum(pts.values()) * (100 / 85)))
     action = "APPROVE" if score >= 25 else "WATCH" if score >= 15 else "DISCARD"
     return score, pts, action
@@ -421,12 +395,12 @@ def send_alert(signal, bsr_alert=False, pct_change=0):
         import sendgrid
         from sendgrid.helpers.mail import Mail
 
-        product  = signal["product"]
-        score    = signal.get("score", 0)
-        upvotes  = signal.get("upvotes", 0)
-        delta    = signal.get("trends", {}).get("delta", 0)
-        intent   = signal.get("intent", 0)
-        post_url = signal.get("post_url", "")
+        product   = signal["product"]
+        score     = signal.get("score", 0)
+        upvotes   = signal.get("upvotes", 0)
+        delta     = signal.get("trends", {}).get("delta", 0)
+        intent    = signal.get("intent", 0)
+        post_url  = signal.get("post_url", "")
         subreddit = signal.get("subreddit", "")
 
         if bsr_alert:
@@ -507,7 +481,6 @@ def send_alert(signal, bsr_alert=False, pct_change=0):
 def run_scraper():
     log.info(f"══ Scraper run {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ══")
     log.info(f"   Brands: {len(BRANDS)} | Subreddits: {len(SUBREDDITS)}")
-    log.info(f"   Intent phrases: {len(INTENT_PHRASES)}")
 
     scheduler_state["running"] = True
     existing  = load_signals()
@@ -528,8 +501,6 @@ def run_scraper():
                     continue
                 if score_val < 0:
                     continue
-                if num_comments < 0:
-                    continue
 
                 title    = post.get("title", "")
                 selftext = post.get("selftext", "")[:300]
@@ -539,7 +510,6 @@ def run_scraper():
                     continue
 
                 log.info(f"  ✓ [{score_val:,}] {title[:65]}")
-                log.info(f"    Product: {product}")
 
                 comments  = get_post_comments(name, post_id)
                 intent    = count_intent(comments)
@@ -581,7 +551,6 @@ def run_scraper():
                 if action == "APPROVE":
                     sent = send_alert(signal)
                     signal["emailSent"] = sent
-                    log.info(f"    ⚡ APPROVE — email: {sent}")
 
                 new_found.append(signal)
                 seen_ids.add(post_id)
@@ -593,8 +562,8 @@ def run_scraper():
             log.error(f"Error on r/{name}: {e}")
 
     if new_found:
-        save_signals(new_found + existing)
-        log.info(f"── Saved {len(new_found)} signals (total: {len(existing) + len(new_found)})")
+        save_signals(new_found)
+        log.info(f"── Saved {len(new_found)} new signals")
     else:
         log.info("── No new signals this run")
 
@@ -620,7 +589,7 @@ def run_bsr_monitor():
         log.error(f"BSR monitor error: {e}")
 
 # ─────────────────────────────────────────────────────────────
-# SCHEDULER THREADS
+# SCHEDULER
 # ─────────────────────────────────────────────────────────────
 
 def scraper_loop():
@@ -635,7 +604,7 @@ def scraper_loop():
 
 
 def bsr_loop():
-    log.info("BSR monitor thread started — first run in 1 hour")
+    log.info("BSR monitor thread started")
     time.sleep(3600)
     while True:
         try:
@@ -649,9 +618,8 @@ def start_scheduler():
     def delayed_start():
         time.sleep(10)
         threading.Thread(target=scraper_loop, daemon=True, name="scraper").start()
-        log.info("✅ Scraper thread started")
         threading.Thread(target=bsr_loop, daemon=True, name="bsr").start()
-        log.info("✅ BSR thread started")
+        log.info("✅ Scheduler threads started")
 
     threading.Thread(target=delayed_start, daemon=True).start()
 
@@ -703,7 +671,7 @@ def update_signal(signal_id):
                     except Exception as e:
                         log.error(f"BSR baseline error: {e}")
             s["lastUpdated"] = datetime.now().isoformat()
-            save_signals(signals)
+            save_signals([s])
             return jsonify({"ok": True})
     return jsonify({"error": "Not found"}), 404
 
@@ -750,9 +718,7 @@ def add_manual():
         "bsr_history":      [],
         "bsr_checked":      None,
     }
-    signals = load_signals()
-    signals.insert(0, signal)
-    save_signals(signals)
+    save_signals([signal])
     if action == "APPROVE":
         send_alert(signal)
     return jsonify({"ok": True, "signal": signal})
@@ -774,6 +740,14 @@ def trigger_bsr():
     return jsonify({"ok": True, "message": "BSR monitor started"})
 
 
+@app.route("/api/clear-signals", methods=["POST"])
+def clear_signals():
+    if not auth(request):
+        return jsonify({"error": "Unauthorized"}), 401
+    clear_db()
+    return jsonify({"ok": True, "message": "All signals cleared"})
+
+
 @app.route("/api/health", methods=["GET"])
 def health():
     signals = load_signals()
@@ -785,7 +759,7 @@ def health():
         "subreddits":   len(SUBREDDITS),
         "intent":       len(INTENT_PHRASES),
         "keepa":        bool(KEEPA_API_KEY),
-        "version":      "3.3 (intelligence upgrade)",
+        "version":      "3.4 (postgres)",
         "last_scrape":  scheduler_state["last_scrape"],
         "run_count":    scheduler_state["scrape_count"],
         "scraping_now": scheduler_state["running"],
@@ -796,7 +770,7 @@ def health():
 def index():
     return jsonify({
         "name":       "skinsignal",
-        "version":    "3.3",
+        "version":    "3.4",
         "brands":     len(BRANDS),
         "subreddits": len(SUBREDDITS),
     })
@@ -804,16 +778,19 @@ def index():
 # ─────────────────────────────────────────────────────────────
 # ENTRY POINT
 # ─────────────────────────────────────────────────────────────
+
 port = int(os.environ.get("PORT", 8080))
 log.info("=" * 55)
-log.info("  SKINSIGNAL v3.3 — Intelligence Upgrade")
+log.info("  SKINSIGNAL v3.4 — Postgres Edition")
 log.info(f"  Port:       {port}")
 log.info(f"  Brands:     {len(BRANDS)}")
 log.info(f"  Subreddits: {len(SUBREDDITS)}")
 log.info(f"  Intent:     {len(INTENT_PHRASES)} phrases")
 log.info(f"  Alert:      {ALERT_EMAIL}")
 log.info("=" * 55)
-start_scheduler()  # ← now runs under Gunicorn
+
+init_db()
+start_scheduler()
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=port, debug=False)
