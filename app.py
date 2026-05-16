@@ -409,7 +409,7 @@ def score_signal(upvotes, intent_count, trends):
         0
     )
     score  = min(100, int(sum(pts.values()) * (100 / 85)))
-    action = "APPROVE" if score >= 10 else "WATCH" if score >= 5 else "DISCARD"
+    action = "APPROVE" if score >= 25 else "WATCH" if score >= 15 else "DISCARD"
     return score, pts, action
 
 # ─────────────────────────────────────────────────────────────
